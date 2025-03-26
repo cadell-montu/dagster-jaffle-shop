@@ -1,3 +1,9 @@
-# Basic dbt Project
+# The Jaffle Shop
 
-This project is used for the Dagster dbt integration guide
+featuring DBT and Dagster.
+
+## References
+https://docs.getdbt.com/guides/duckdb?step=1
+https://github.com/dbt-labs/jaffle_shop_duckdb/
+https://docs.dagster.io/integrations/libraries/dbt/using-dbt-with-dagster/
+
