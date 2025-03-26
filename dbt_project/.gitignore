@@ -2,4 +2,6 @@
 target/
 dbt_packages/
 logs/
-*.duckdb
+.user.yml
+**/*.duckdb
+**/*.duckdb.wal
