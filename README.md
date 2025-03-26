@@ -2,6 +2,8 @@
 
 featuring DBT and Dagster.
 
+![Screenshot](screenshot.png)
+
 ## Overview
 `dbt build` to run dbt.
 
