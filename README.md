@@ -11,23 +11,23 @@ featuring DBT and Dagster.
 
 ## Getting Started
 1. Setup venv.
-    ```
+   ```
    python -m venv venv
    ```
 2. Use venv.
-    ```
+   ```
    source venv/bin/activate
    ```
 3. Install dependencies.
-    ```
+   ```
    pip install -r requirements.txt
    ```
 4. Build DBT
-    ```
+   ```
    dbt build
    ```
 5. Open Dagster
-    ```
+   ```
    cd jaffle_dagster
    dagster dev
    ```
