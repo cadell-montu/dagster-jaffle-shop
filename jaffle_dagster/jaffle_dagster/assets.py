@@ -1,3 +1,4 @@
+from typing import Optional
 from dagster import AssetExecutionContext, Config
 
 from dagster_dbt import DbtCliResource, dbt_assets
@@ -5,7 +6,7 @@ from dagster_dbt import DbtCliResource, dbt_assets
 from .project import jaffle_shop_project
 
 class MyDbtConfig(Config):
-    full_refresh: bool
+    full_refresh: Optional[bool] = None
 
 @dbt_assets(manifest=jaffle_shop_project.manifest_path)
 def my_dbt_assets(
