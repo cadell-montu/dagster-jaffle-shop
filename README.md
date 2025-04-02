@@ -5,9 +5,15 @@ featuring DBT and Dagster.
 ![Screenshot](screenshot.png)
 
 ## Overview
-`dbt build` to run dbt.
+```
+cd dbt
+dbt build
+```
 
-`dagster dev` from the `dagster` folder.
+```
+cd dagster
+dagster dev
+```
 
 ## Getting Started
 1. Setup venv.
@@ -20,10 +26,11 @@ featuring DBT and Dagster.
    ```
 3. Install dependencies.
    ```
-   pip3 install -r requirements.txt
+   pip install -r requirements.txt
    ```
 4. Build DBT
    ```
+   cd dbt
    dbt build
    ```
 5. Open Dagster

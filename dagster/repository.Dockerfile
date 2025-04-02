@@ -5,11 +5,13 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 WORKDIR /opt/dagster/app
+COPY . .
 
-COPY . /opt/dagster/app
-
+WORKDIR dbt
 RUN dbt compile
 RUN dbt seed
+
+WORKDIR /opt/dagster/app
 
 EXPOSE 4000
 
