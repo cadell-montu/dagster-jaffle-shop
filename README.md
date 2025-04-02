@@ -20,7 +20,7 @@ featuring DBT and Dagster.
    ```
 3. Install dependencies.
    ```
-   pip install -r requirements.txt
+   pip3 install -r requirements.txt
    ```
 4. Build DBT
    ```
