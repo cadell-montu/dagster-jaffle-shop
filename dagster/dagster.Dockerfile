@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-COPY jaffle_dagster/requirements.txt .
+COPY dagster/requirements.txt .
 
 RUN pip install -r requirements.txt
 
@@ -16,7 +16,7 @@ ENV DAGSTER_HOME=/opt/dagster/dagster_home/
 
 RUN mkdir -p $DAGSTER_HOME
 
-COPY jaffle_dagster/workspace.yaml $DAGSTER_HOME
-COPY jaffle_dagster/dagster.docker.yaml $DAGSTER_HOME/dagster.yaml
+COPY dagster/workspace.yaml $DAGSTER_HOME
+COPY dagster/dagster.docker.yaml $DAGSTER_HOME/dagster.yaml
 
 WORKDIR $DAGSTER_HOME

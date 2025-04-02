@@ -3,7 +3,7 @@ FROM python:3.10-slim
 # Checkout and install dagster libraries needed to run the gRPC server
 # exposing your repository to dagster-webserver and dagster-daemon, and to load the DagsterInstance
 
-COPY jaffle_dagster/requirements.txt .
+COPY dagster/requirements.txt .
 
 RUN pip install -r requirements.txt
 
@@ -24,4 +24,4 @@ RUN dbt seed
 
 EXPOSE 4000
 
-CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-d", "jaffle_dagster", "-m", "jaffle_dagster.definitions"]
+CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-d", "dagster", "-m", "jaffle_dagster.definitions"]

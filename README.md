@@ -7,7 +7,7 @@ featuring DBT and Dagster.
 ## Overview
 `dbt build` to run dbt.
 
-`dagster dev` from the `jaffle_dagster` folder.
+`dagster dev` from the `dagster` folder.
 
 ## Getting Started
 1. Setup venv.
@@ -28,7 +28,7 @@ featuring DBT and Dagster.
    ```
 5. Open Dagster
    ```
-   cd jaffle_dagster
+   cd dagster
    dagster dev
    ```
 

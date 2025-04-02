@@ -4,15 +4,15 @@ services:
   # This service runs the postgres DB used by dagster for run storage, schedule storage,
   # and event log storage. Depending on the hardware you run this Compose on, you may be able
   # to reduce the interval and timeout in the healthcheck to speed up your `docker-compose up` times.
-  docker_example_postgresql:
+  postgres:
     image: postgres:11
-    container_name: docker_example_postgresql
+    container_name: postgres
     environment:
       POSTGRES_USER: "postgres_user"
       POSTGRES_PASSWORD: "postgres_password"
       POSTGRES_DB: "postgres_db"
     networks:
-      - docker_example_network
+      - docker_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres_user -d postgres_db"]
       interval: 10s
@@ -25,30 +25,28 @@ services:
       # Multiple containers like this can be deployed separately - each just needs to run on
       # its own port, and have its own entry in the workspace.yaml file that's loaded by the
       # webserver.
-  docker_example_user_code:
+  repository:
     build:
       context: .
-      dockerfile: ./jaffle_dagster/Dockerfile_user_code
-    container_name: docker_example_user_code
-    image: docker_example_user_code_image
+      dockerfile: dagster/repository.Dockerfile
+    container_name: repository
+    image: repository_image
     restart: always
-    ports:
-      - "4000:4000"
     environment:
       DAGSTER_POSTGRES_USER: "postgres_user"
       DAGSTER_POSTGRES_PASSWORD: "postgres_password"
       DAGSTER_POSTGRES_DB: "postgres_db"
-      DAGSTER_CURRENT_IMAGE: "docker_example_user_code_image"
+      DAGSTER_CURRENT_IMAGE: "repository_image"
     networks:
-      - docker_example_network
+      - docker_network
 
   # This service runs dagster-webserver, which loads your user code from the user code container.
   # Since our instance uses the QueuedRunCoordinator, any runs submitted from the webserver will be put on
   # a queue and later dequeued and launched by dagster-daemon.
-  docker_example_webserver:
+  webserver:
     build:
       context: .
-      dockerfile: ./jaffle_dagster/Dockerfile_dagster
+      dockerfile: dagster/dagster.Dockerfile
     entrypoint:
       - dagster-webserver
       - -h
@@ -57,7 +55,7 @@ services:
       - "3000"
       - -w
       - workspace.yaml
-    container_name: docker_example_webserver
+    container_name: webserver
     expose:
       - "3000"
     ports:
@@ -70,23 +68,23 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/io_manager_storage:/tmp/io_manager_storage
     networks:
-      - docker_example_network
+      - docker_network
     depends_on:
-      docker_example_postgresql:
+      postgres:
         condition: service_healthy
-      docker_example_user_code:
+      repository:
         condition: service_started
 
   # This service runs the dagster-daemon process, which is responsible for taking runs
   # off of the queue and launching them, as well as creating runs from schedules or sensors.
-  docker_example_daemon:
+  daemon:
     build:
       context: .
-      dockerfile: ./jaffle_dagster/Dockerfile_dagster
+      dockerfile: dagster/dagster.Dockerfile
     entrypoint:
       - dagster-daemon
       - run
-    container_name: docker_example_daemon
+    container_name: daemon
     restart: on-failure
     environment:
       DAGSTER_POSTGRES_USER: "postgres_user"
@@ -96,14 +94,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/io_manager_storage:/tmp/io_manager_storage
     networks:
-      - docker_example_network
+      - docker_network
     depends_on:
-      docker_example_postgresql:
+      postgres:
         condition: service_healthy
-      docker_example_user_code:
+      repository:
         condition: service_started
-
 networks:
-  docker_example_network:
+  docker_network:
     driver: bridge
-    name: docker_example_network
+    name: docker_network
