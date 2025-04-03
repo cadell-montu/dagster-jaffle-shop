@@ -1,4 +1,4 @@
-target
-infra
-venv
+**/target
+**/infra
+**/venv
 **/.tmp_dagster*
