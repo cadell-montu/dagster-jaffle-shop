@@ -1,6 +1,14 @@
 import { RemovalPolicy, Stack } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { SubnetType, Vpc } from 'aws-cdk-lib/aws-ec2';
+import {
+  InstanceClass,
+  InstanceSize,
+  InstanceType,
+  Port,
+  SecurityGroup,
+  SubnetType,
+  Vpc,
+} from 'aws-cdk-lib/aws-ec2';
 import {
   AwsLogDriverMode,
   Cluster,
@@ -8,11 +16,18 @@ import {
   FargateService,
   FargateTaskDefinition,
   LogDrivers,
+  Secret,
 } from 'aws-cdk-lib/aws-ecs';
 import { EcrStack } from './ecr-stack';
 import { DockerImageAsset, Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import * as path from 'path';
+import {
+  Credentials,
+  DatabaseInstance,
+  DatabaseInstanceEngine,
+  DatabaseSecret,
+} from 'aws-cdk-lib/aws-rds';
 
 // import { MontuSharedVpc } from '@montugroup/infra';
 
@@ -39,7 +54,34 @@ export class DagsterStack extends Stack {
           name: 'dagster-private-subnet',
           subnetType: SubnetType.PRIVATE_WITH_EGRESS,
         },
+        {
+          name: 'dagster-isolated-subnet',
+          subnetType: SubnetType.PRIVATE_ISOLATED,
+        },
       ],
+    });
+
+    const databaseSecurityGroup = new SecurityGroup(this, 'DatabaseSecurityGroup', {
+      vpc,
+      description: 'Dagster Database',
+      allowAllOutbound: true,
+      disableInlineRules: true,
+    });
+
+    const database = new DatabaseInstance(this, 'DagsterDatabase', {
+      engine: DatabaseInstanceEngine.POSTGRES,
+      databaseName: 'dagster',
+      instanceIdentifier: 'dagster',
+      instanceType: InstanceType.of(InstanceClass.T4G, InstanceSize.MICRO),
+      allocatedStorage: 20,
+      credentials: Credentials.fromGeneratedSecret('dagster'),
+      vpc,
+      vpcSubnets: {
+        subnetType: SubnetType.PRIVATE_ISOLATED,
+      },
+      securityGroups: [databaseSecurityGroup],
+      storageEncrypted: true,
+      removalPolicy: RemovalPolicy.DESTROY,
     });
 
     const cluster = new Cluster(this, 'DagsterCluster', {
@@ -65,6 +107,14 @@ export class DagsterStack extends Stack {
     );
     // ContainerImage.fromEcrRepository(repository, `sha-${123456}`);
 
+    const dagsterSecrets = {
+      DAGSTER_POSTGRES_USER: Secret.fromSecretsManager(database.secret!, 'username'),
+      DAGSTER_POSTGRES_PASSWORD: Secret.fromSecretsManager(database.secret!, 'password'),
+      DAGSTER_POSTGRES_HOST: Secret.fromSecretsManager(database.secret!, 'host'),
+      DAGSTER_POSTGRES_DB: Secret.fromSecretsManager(database.secret!, 'dbname'),
+      DAGSTER_POSTGRES_PORT: Secret.fromSecretsManager(database.secret!, 'port'),
+    };
+
     taskDefinition.addContainer('DagsterContainerImage', {
       image,
       entryPoint: ['dagster-webserver', '-h', '0.0.0.0', '-p', '3000', '-w', 'workspace.yaml'],
@@ -78,7 +128,17 @@ export class DagsterStack extends Stack {
         }),
       }),
       environment: {},
+      secrets: {
+        ...dagsterSecrets,
+      },
     });
+
+    const dagsterSecurityGroup = new SecurityGroup(this, 'DagsterSecurityGroup', {
+      vpc,
+      description: 'Dagster',
+      allowAllOutbound: true,
+    });
+    databaseSecurityGroup.addIngressRule(dagsterSecurityGroup, Port.POSTGRES);
 
     new FargateService(this, 'DagsterFargateService', {
       cluster,
@@ -86,6 +146,7 @@ export class DagsterStack extends Stack {
       vpcSubnets: {
         subnetType: SubnetType.PRIVATE_WITH_EGRESS,
       },
+      securityGroups: [dagsterSecurityGroup],
       serviceName: 'dagster-service',
       desiredCount: 1,
       minHealthyPercent: 0,
