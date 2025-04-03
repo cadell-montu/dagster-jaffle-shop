@@ -3,7 +3,7 @@
 // import * as Infra from '../lib/infra-stack';
 
 // example test. To run these tests, uncomment this file along with the
-// example resource in lib/infra-stack.ts
+// example resource in lib/dagster-stack.ts
 test('SQS Queue Created', () => {
 //   const app = new cdk.App();
 //     // WHEN
