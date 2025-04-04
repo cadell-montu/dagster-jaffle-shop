@@ -25,12 +25,7 @@ import { EcrStack } from './ecr-stack';
 import { DockerImageAsset, Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import * as path from 'path';
-import {
-  Credentials,
-  DatabaseInstance,
-  DatabaseInstanceEngine,
-  DatabaseSecret,
-} from 'aws-cdk-lib/aws-rds';
+import { Credentials, DatabaseInstance, DatabaseInstanceEngine } from 'aws-cdk-lib/aws-rds';
 import { NamespaceType } from 'aws-cdk-lib/aws-servicediscovery';
 
 // import { MontuSharedVpc } from '@montugroup/infra';
