@@ -27,6 +27,8 @@ import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import * as path from 'path';
 import { Credentials, DatabaseInstance, DatabaseInstanceEngine } from 'aws-cdk-lib/aws-rds';
 import { NamespaceType } from 'aws-cdk-lib/aws-servicediscovery';
+import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
+import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 
 // import { MontuSharedVpc } from '@montugroup/infra';
 
@@ -119,27 +121,33 @@ export class DagsterStack extends Stack {
         directory: path.join(process.cwd(), '..'),
         file: 'dagster/dagster.Dockerfile',
         platform: Platform.LINUX_AMD64,
+        buildArgs: {},
       }),
     );
     // ContainerImage.fromEcrRepository(repository, `sha-${123456}`);
 
-    webserverTaskDefinition.addContainer('DagsterWebserver', {
-      image: dagsterImage,
-      entryPoint: ['dagster-webserver', '-h', '0.0.0.0', '-p', '3000', '-w', 'workspace.yaml'],
-      logging: LogDrivers.awsLogs({
-        streamPrefix: 'dagster-webserver',
-        mode: AwsLogDriverMode.NON_BLOCKING,
-        logGroup: new LogGroup(this, 'DagsterWebserverLogGroup', {
-          logGroupName: 'dagster-webserver',
-          retention: RetentionDays.TWO_WEEKS,
-          removalPolicy: RemovalPolicy.DESTROY,
+    webserverTaskDefinition
+      .addContainer('DagsterWebserver', {
+        image: dagsterImage,
+        entryPoint: ['dagster-webserver', '-h', '0.0.0.0', '-p', '80', '-w', 'workspace.yaml'],
+        logging: LogDrivers.awsLogs({
+          streamPrefix: 'dagster-webserver',
+          mode: AwsLogDriverMode.NON_BLOCKING,
+          logGroup: new LogGroup(this, 'DagsterWebserverLogGroup', {
+            logGroupName: 'dagster-webserver',
+            retention: RetentionDays.TWO_WEEKS,
+            removalPolicy: RemovalPolicy.DESTROY,
+          }),
         }),
-      }),
-      environment: {},
-      secrets: {
-        ...dagsterSecrets,
-      },
-    });
+        environment: {},
+        secrets: {
+          ...dagsterSecrets,
+        },
+      })
+      .addPortMappings({
+        containerPort: 80,
+        protocol: Protocol.TCP,
+      });
 
     const dagsterWebserverSecurityGroup = new SecurityGroup(this, 'DagsterWebserverSecurityGroup', {
       vpc,
@@ -148,24 +156,51 @@ export class DagsterStack extends Stack {
     });
     databaseSecurityGroup.addIngressRule(dagsterWebserverSecurityGroup, Port.POSTGRES);
 
-    new FargateService(this, 'DagsterWebserverFargateService', {
-      cluster,
-      taskDefinition: webserverTaskDefinition,
-      vpcSubnets: {
-        subnetType: SubnetType.PRIVATE_WITH_EGRESS,
+    const albWebserverService = new ApplicationLoadBalancedFargateService(
+      this,
+      'DagsterWebserverAlbFargateService',
+      {
+        cluster,
+        taskDefinition: webserverTaskDefinition,
+        securityGroups: [dagsterWebserverSecurityGroup],
+        loadBalancerName: 'dagster-webserver',
+        serviceName: 'webserver',
+        desiredCount: 1,
+        minHealthyPercent: 0,
+        circuitBreaker: {
+          enable: true,
+          rollback: true,
+        },
+        publicLoadBalancer: true,
+        protocol: ApplicationProtocol.HTTP,
+        openListener: false,
+        // redirectHTTP: true,
+        // protocol: ApplicationProtocol.HTTPS,
+        // sslPolicy: SslPolicy.RECOMMENDED_TLS,
+        taskSubnets: {
+          subnetType: SubnetType.PRIVATE_WITH_EGRESS,
+        },
       },
-      securityGroups: [dagsterWebserverSecurityGroup],
-      serviceName: 'webserver',
-      desiredCount: 1,
-      minHealthyPercent: 0,
-      circuitBreaker: {
-        enable: true,
-        rollback: true,
-      },
-      serviceConnectConfiguration: {
-        namespace: namespace.namespaceArn,
-      },
+    );
+    albWebserverService.service.enableServiceConnect({
+      namespace: namespace.namespaceArn,
     });
+
+    const albSecurityGroup = new SecurityGroup(this, 'AlbSecurityGroup', {
+      vpc,
+      allowAllOutbound: true,
+    });
+
+    // Netskope
+    const netskopeIpsString =
+      '163.116.211.0/24,163.116.192.0/24,163.116.203.0/24,163.116.198.0/24,163.116.206.0/24,163.116.215.0/24,163.116.202.0/24';
+    const netskopeIps = netskopeIpsString.split(',');
+    const ipRestrictions = [...netskopeIps, '159.196.132.38/32']; // Cadell's House
+    ipRestrictions.forEach((ipAddress, index) => {
+      albSecurityGroup.addIngressRule(Peer.ipv4(ipAddress), Port.HTTP, `Netskope ${index + 1}`);
+    });
+
+    albWebserverService.loadBalancer.addSecurityGroup(albSecurityGroup);
 
     const daemonTaskDefinition = new FargateTaskDefinition(this, 'DagsterDaemonTaskDefinition', {
       cpu: 1024,
@@ -270,7 +305,7 @@ export class DagsterStack extends Stack {
       },
     );
     dagsterRepositorySecurityGroup.addIngressRule(
-      Peer.anyIpv4(),
+      Peer.anyIpv4(), // @todo(cc): we could lock this down
       Port.tcp(repositoryPort),
       'repository inbound',
       false,
