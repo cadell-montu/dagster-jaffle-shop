@@ -22,13 +22,12 @@ import {
   Secret,
 } from 'aws-cdk-lib/aws-ecs';
 import { EcrStack } from './ecr-stack';
-import { DockerImageAsset, Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
-import * as path from 'path';
 import { Credentials, DatabaseInstance, DatabaseInstanceEngine } from 'aws-cdk-lib/aws-rds';
 import { NamespaceType } from 'aws-cdk-lib/aws-servicediscovery';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 // import { MontuSharedVpc } from '@montugroup/infra';
 
@@ -37,10 +36,10 @@ export type DagsterStackProps = {
 };
 
 export class DagsterStack extends Stack {
-  constructor(scope: Construct, id: string, props?: DagsterStackProps) {
+  constructor(scope: Construct, id: string, props: DagsterStackProps) {
     super(scope, id);
 
-    // const { ecrStack } = props;
+    const { ecrStack } = props;
 
     // const montuSharedVpc = new MontuSharedVpc(this);
 
@@ -114,17 +113,9 @@ export class DagsterStack extends Stack {
       },
     );
 
-    // repository.grantPull(taskDefinition.obtainExecutionRole());
+    ecrStack.dagsterCore.grantPull(webserverTaskDefinition.obtainExecutionRole());
 
-    const dagsterImage: ContainerImage = ContainerImage.fromDockerImageAsset(
-      new DockerImageAsset(this, 'dagster-image-asset', {
-        directory: path.join(process.cwd(), '..'),
-        file: 'dagster/dagster.Dockerfile',
-        platform: Platform.LINUX_AMD64,
-        buildArgs: {},
-      }),
-    );
-    // ContainerImage.fromEcrRepository(repository, `sha-${123456}`);
+    const dagsterImage = ContainerImage.fromEcrRepository(ecrStack.dagsterCore, `latest`);
 
     webserverTaskDefinition
       .addContainer('DagsterWebserver', {
@@ -207,6 +198,9 @@ export class DagsterStack extends Stack {
       memoryLimitMiB: 2048,
     });
 
+    ecrStack.dagsterCore.grantPull(daemonTaskDefinition.obtainExecutionRole());
+    ecrStack.dagsterRepository.grantPull(daemonTaskDefinition.obtainExecutionRole());
+
     daemonTaskDefinition.addContainer('DagsterDaemon', {
       image: dagsterImage,
       entryPoint: ['dagster-daemon', 'run'],
@@ -219,11 +213,45 @@ export class DagsterStack extends Stack {
           removalPolicy: RemovalPolicy.DESTROY,
         }),
       }),
-      environment: {},
       secrets: {
         ...dagsterSecrets,
       },
     });
+
+    // const { account, region } = this;
+
+    daemonTaskDefinition.addToTaskRolePolicy(
+      new PolicyStatement({
+        sid: 'DagsterDaemon',
+        effect: Effect.ALLOW,
+        actions: [
+          'ec2:DescribeNetworkInterfaces',
+          'ecs:DescribeTaskDefinition',
+          'ecs:DescribeTasks',
+          'ecs:ListAccountSettings',
+          'ecs:RegisterTaskDefinition',
+          'ecs:RunTask',
+          'ecs:TagResource',
+          'secretsmanager:DescribeSecret',
+          'secretsmanager:ListSecrets',
+          'secretsmanager:GetSecretValue',
+        ],
+        resources: [`*`], // @todo(cc): lock this down
+      }),
+    );
+    daemonTaskDefinition.addToTaskRolePolicy(
+      new PolicyStatement({
+        sid: 'DagsterDaemonPassRole',
+        effect: Effect.ALLOW,
+        actions: ['iam:PassRole'],
+        resources: ['*'],
+        conditions: {
+          StringEquals: {
+            'iam:PassedToService': 'ecs-tasks.amazonaws.com',
+          },
+        },
+      }),
+    );
 
     const dagsterDaemonSecurityGroup = new SecurityGroup(this, 'DagsterSecurityGroup', {
       vpc,
@@ -257,16 +285,9 @@ export class DagsterStack extends Stack {
       },
     );
 
-    // repository.grantPull(taskDefinition.obtainExecutionRole());
+    ecrStack.dagsterRepository.grantPull(repositoryTaskDefinition.obtainExecutionRole());
 
-    const repositoryImage: ContainerImage = ContainerImage.fromDockerImageAsset(
-      new DockerImageAsset(this, 'dagster-repository-image-asset', {
-        directory: path.join(process.cwd(), '..'),
-        file: 'dagster/repository.Dockerfile',
-        platform: Platform.LINUX_AMD64,
-      }),
-    );
-    // ContainerImage.fromEcrRepository(repository, `sha-${123456}`);
+    const repositoryImage = ContainerImage.fromEcrRepository(ecrStack.dagsterRepository, `latest`);
 
     const repositoryServiceName = 'repository';
     const repositoryPort = 4000;
@@ -283,7 +304,9 @@ export class DagsterStack extends Stack {
             removalPolicy: RemovalPolicy.DESTROY,
           }),
         }),
-        environment: {},
+        environment: {
+          DAGSTER_CURRENT_IMAGE: ecrStack.dagsterRepository.repositoryUriForTag('latest'),
+        },
         secrets: {
           ...dagsterSecrets,
         },

@@ -5,6 +5,6 @@ import { EcrStack } from '../lib/ecr-stack';
 
 const app = new App();
 
-// const ecrStack = new EcrStack(app, 'DagsterEcrStack');
+const ecrStack = new EcrStack(app, 'DagsterEcrStack');
 
-new DagsterStack(app, 'DagsterStack');
+new DagsterStack(app, 'DagsterStack', { ecrStack });

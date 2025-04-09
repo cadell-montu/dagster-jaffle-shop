@@ -30,7 +30,7 @@ services:
       context: .
       dockerfile: dagster/repository.Dockerfile
     container_name: repository
-    image: repository_image
+    image: dagster-repository
     restart: always
     environment:
       DAGSTER_POSTGRES_HOST: "postgres"
@@ -38,7 +38,7 @@ services:
       DAGSTER_POSTGRES_PASSWORD: "postgres_password"
       DAGSTER_POSTGRES_DB: "postgres_db"
       DAGSTER_POSTGRES_PORT: "5432"
-      DAGSTER_CURRENT_IMAGE: "repository_image"
+      DAGSTER_CURRENT_IMAGE: "dagster-repository"
     networks:
       - docker_network
 
